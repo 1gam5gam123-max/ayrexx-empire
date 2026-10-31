@@ -3,14 +3,14 @@ const store=require('./store');
 const commands=[
  new SlashCommandBuilder().setName('ticket-panel').setDescription('Post support panel').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
  new SlashCommandBuilder().setName('close').setDescription('Close this ticket'),
- new SlashCommandBuilder().setName('ticket-reopen').setDescription('Reopen this ticket').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+ new SlashCommandBuilder().setName('ticket-reopen').setDescription('Reopen this ticket'),
  new SlashCommandBuilder().setName('ticket-claim').setDescription('Claim this ticket'),
- new SlashCommandBuilder().setName('ticket-unclaim').setDescription('Unclaim this ticket').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+ new SlashCommandBuilder().setName('ticket-unclaim').setDescription('Unclaim this ticket'),
  new SlashCommandBuilder().setName('ticket-transcript').setDescription('Export ticket transcript'),
- new SlashCommandBuilder().setName('ticket-add').setDescription('Add member').addUserOption(o=>o.setName('member').setDescription('Member').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
- new SlashCommandBuilder().setName('ticket-remove').setDescription('Remove member').addUserOption(o=>o.setName('member').setDescription('Member').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
- new SlashCommandBuilder().setName('ticket-rename').setDescription('Rename ticket').addStringOption(o=>o.setName('name').setDescription('New name').setRequired(true).setMaxLength(90)).setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
-, new SlashCommandBuilder().setName('ticket-delete').setDescription('Delete a closed ticket after transcript').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+ new SlashCommandBuilder().setName('ticket-add').setDescription('Add member').addUserOption(o=>o.setName('member').setDescription('Member').setRequired(true)),
+ new SlashCommandBuilder().setName('ticket-remove').setDescription('Remove member').addUserOption(o=>o.setName('member').setDescription('Member').setRequired(true)),
+ new SlashCommandBuilder().setName('ticket-rename').setDescription('Rename ticket').addStringOption(o=>o.setName('name').setDescription('New name').setRequired(true).setMaxLength(90))
+, new SlashCommandBuilder().setName('ticket-delete').setDescription('Delete a closed ticket after transcript')
 ].map(x=>x.toJSON());
 const staff=(i,c)=>Boolean(i.memberPermissions?.has(PermissionFlagsBits.ManageChannels)||i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)||(c.ticketSupportRole&&i.member?.roles?.cache?.has(c.ticketSupportRole)));
 async function ctx(i){const t=await store.getTicketByChannel(i.channelId);if(!t)return {error:'القناة دي مش تذكرة مسجلة.'};const c=await store.get(i.guildId);return {t,c,admin:staff(i,c),owner:t.userId===i.user.id};}
