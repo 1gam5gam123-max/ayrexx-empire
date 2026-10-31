@@ -59,7 +59,7 @@ async function handleTicketInteraction(i){
   const cfg=await store.get(i.guildId);
   const selected=i.isStringSelectMenu()?i.values[0]:'';
   const types=Array.isArray(cfg.ticketTypes)?cfg.ticketTypes:[];
-  const type=types.find(t=>t.key===selected)||null;
+  const type=types.find(t=>t.key===selected)||(types.length===1?types[0]:null);
   if(i.isStringSelectMenu()&&!type)return i.reply({content:'نوع التذكرة غير موجود؛ حدّث البانل.',ephemeral:true});
   const old=await store.findOpenTicket(i.guildId,i.user.id);if(old){const oldCh=await i.guild.channels.fetch(old.channelId).catch(()=>null);if(oldCh)return i.reply({content:'⚠️ عندك تذكرة مفتوحة بالفعل: **'+oldCh.name+'**',ephemeral:true});}
   await i.deferReply({ephemeral:true});
