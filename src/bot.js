@@ -1,5 +1,6 @@
 const {Client,GatewayIntentBits,REST,Routes,SlashCommandBuilder,PermissionFlagsBits,EmbedBuilder,ChannelType}=require('discord.js');
-const store=require('./store');\nconst tickets=require('./tickets');
+const store=require('./store');
+const tickets=require('./tickets');
 const commands=[
  new SlashCommandBuilder().setName('ping').setDescription('Check Ayrexx status'),
  new SlashCommandBuilder().setName('server').setDescription('Show detailed server information'),
