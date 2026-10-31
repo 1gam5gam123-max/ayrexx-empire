@@ -19,7 +19,7 @@ function btn(id,label,emoji,style){const b=new ButtonBuilder().setCustomId('ayre
 function ticketRows(t,admin=true){
  if(t.status==='closed'){
   const row=new ActionRowBuilder().addComponents(btn('reopen','إعادة فتح','🔓',ButtonStyle.Success),btn('transcript','Transcript','📄',ButtonStyle.Secondary));
-  row.addComponents(btn('delete','حذف التذكرة','🗑️',ButtonStyle.Danger));
+  if(admin)row.addComponents(btn('delete','حذف التذكرة','🗑️',ButtonStyle.Danger));
   return [row];
  }
  const row=new ActionRowBuilder().addComponents(btn('close','إغلاق','🔒',ButtonStyle.Danger));
@@ -27,13 +27,13 @@ function ticketRows(t,admin=true){
  return [row];
 }
 const escapeHtml=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-async function syncTicketMessage(channel,t,actor){
+async function syncTicketMessage(channel,t,actor,admin=true){
  const messages=await channel.messages.fetch({limit:100}).catch(()=>null);
  const panel=messages?.find(m=>m.author.id===channel.client.user.id&&m.components.some(r=>r.components.some(b=>b.customId?.startsWith('ayrexx:ticket:'))));
  if(!panel)return;
  const closed=t.status==='closed';
  const embed=new EmbedBuilder().setColor(closed?0x777777:0xC8102E).setTitle(closed?'🔒 تم إغلاق التذكرة':'🎫 تذكرة دعم').setDescription((closed?'أُغلقت التذكرة بواسطة ':'آخر تحديث بواسطة ')+(actor?'<@'+actor+'>':'فريق الدعم')+'\nرقم التذكرة: **#'+String(t.ticketNumber||0).padStart(4,'0')+'**').setFooter({text:'Ayrexx • ISANO'}).setTimestamp();
- await panel.edit({embeds:[embed],components:ticketRows(t,true)});
+ await panel.edit({embeds:[embed],components:ticketRows(t,admin)});
 }
 async function saveTranscript(i,destination){
  const channel=i.channel;let rows=[],before;
@@ -114,7 +114,7 @@ async function handleTicketInteraction(i){
  }
  if(i.isChatInputCommand()&&['close','ticket-reopen','ticket-claim','ticket-unclaim','ticket-transcript','ticket-info','ticket-add','ticket-remove','ticket-rename','ticket-delete'].includes(i.commandName)){
   const x=await ctx(i);if(x.error)return i.reply({content:x.error,ephemeral:true});const {t,c,admin,owner}=x,cmd=i.commandName;
-  if(cmd==='close'){if(!admin&&!owner)return i.reply({content:'⛔ صاحب التذكرة أو الدعم فقط.',ephemeral:true});if(t.status==='closed')return i.reply({content:'مغلقة بالفعل.',ephemeral:true});await i.deferReply({ephemeral:true});const updated=await store.closeTicket(i.channelId,i.user.id);await i.channel.permissionOverwrites.edit(t.userId,{ViewChannel:true,SendMessages:false,ReadMessageHistory:true,AttachFiles:false});await syncTicketMessage(i.channel,updated||{...t,status:'closed'},i.user.id);const log=c.ticketLogChannel?await i.guild.channels.fetch(c.ticketLogChannel).catch(()=>null):null;let transcript='';if(log?.isTextBased()){try{await saveTranscript(i,log);transcript=' وتم حفظ Transcript في السجلات.';}catch(e){console.error('Auto transcript failed:',e.message);transcript=' لكن تعذر حفظ Transcript؛ راجع صلاحيات قناة السجلات.';}}return i.editReply('🔒 تم إغلاق التذكرة وتحديث أزرارها.'+transcript);}
+  if(cmd==='close'){if(!admin&&!owner)return i.reply({content:'⛔ صاحب التذكرة أو الدعم فقط.',ephemeral:true});if(t.status==='closed')return i.reply({content:'مغلقة بالفعل.',ephemeral:true});await i.deferReply({ephemeral:true});const updated=await store.closeTicket(i.channelId,i.user.id);await i.channel.permissionOverwrites.edit(t.userId,{ViewChannel:true,SendMessages:false,ReadMessageHistory:true,AttachFiles:false});await syncTicketMessage(i.channel,updated||{...t,status:'closed'},i.user.id,admin);const log=c.ticketLogChannel?await i.guild.channels.fetch(c.ticketLogChannel).catch(()=>null):null;let transcript='';if(log?.isTextBased()){try{await saveTranscript(i,log);transcript=' وتم حفظ Transcript في السجلات.';}catch(e){console.error('Auto transcript failed:',e.message);transcript=' لكن تعذر حفظ Transcript؛ راجع صلاحيات قناة السجلات.';}}return i.editReply('🔒 تم إغلاق التذكرة وتحديث أزرارها.'+transcript);}
   if(cmd==='ticket-info'){if(!admin&&!owner)return i.reply({content:'صاحب التذكرة أو فريق الدعم فقط.',ephemeral:true});const info=new EmbedBuilder().setColor(0xC8102E).setTitle('معلومات التذكرة').addFields({name:'الرقم',value:'#'+String(t.ticketNumber||0).padStart(4,'0'),inline:true},{name:'الحالة',value:t.status==='open'?'مفتوحة':'مغلقة',inline:true},{name:'صاحب التذكرة',value:'<@'+t.userId+'>',inline:true},{name:'المستلم',value:t.claimedBy?'<@'+t.claimedBy+'>':'غير مستلمة',inline:true},{name:'تاريخ الإنشاء',value:t.createdAt?'<t:'+Math.floor(new Date(t.createdAt).getTime()/1000)+':F>':'غير متاح',inline:false});return i.reply({embeds:[info],ephemeral:true});}
   if(!admin)return i.reply({content:'الأمر لفريق الدعم والإدارة فقط.',ephemeral:true});
   if(cmd==='ticket-claim'||cmd==='ticket-unclaim'){if(t.status!=='open')return i.reply({content:'لا يمكن تغيير الاستلام والتذكرة مغلقة.',ephemeral:true});if(cmd==='ticket-unclaim'&&t.claimedBy&&t.claimedBy!==i.user.id&&!i.memberPermissions?.has(PermissionFlagsBits.ManageGuild))return i.reply({content:'فقط المستلم أو الإدارة يمكنه إلغاء الاستلام.',ephemeral:true});if(cmd==='ticket-claim'&&t.claimedBy)return i.reply({content:'التذكرة مستلمة بالفعل.',ephemeral:true});const claimedBy=cmd==='ticket-claim'?i.user.id:'';const updated=await store.updateTicket(i.channelId,{claimedBy});await syncTicketMessage(i.channel,updated||{...t,claimedBy},i.user.id);return i.reply(cmd==='ticket-claim'?'🙋 تم استلام التذكرة وتحديث الزر.':'↩️ تم إلغاء الاستلام وتحديث الزر.');}
