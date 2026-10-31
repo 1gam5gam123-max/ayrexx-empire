@@ -14,6 +14,7 @@ const commands=[
 ].map(x=>x.toJSON());
 const staff=(i,c)=>Boolean(i.memberPermissions?.has(PermissionFlagsBits.ManageChannels)||i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)||(c.ticketSupportRole&&i.member?.roles?.cache?.has(c.ticketSupportRole)));
 async function ctx(i){const t=await store.getTicketByChannel(i.channelId);if(!t)return {error:'القناة دي مش تذكرة مسجلة.'};const c=await store.get(i.guildId);return {t,c,admin:staff(i,c),owner:t.userId===i.user.id};}
+async function setTicketClosed(i,t,closed){await i.channel.permissionOverwrites.edit(t.userId,{ViewChannel:true,SendMessages:!closed,ReadMessageHistory:true,AttachFiles:!closed}).catch(e=>{throw new Error('تعذر تعديل صلاحيات صاحب التذكرة: '+e.message);});}
 async function saveTranscript(i){let rows=[],before;for(let n=0;n<10;n++){const p=await i.channel.messages.fetch({limit:100,before}).catch(()=>null);if(!p?.size)break;rows.push(...p.values());before=p.last().id;if(p.size<100)break;}rows.sort((a,b)=>a.createdTimestamp-b.createdTimestamp);const body=rows.map(m=>'['+new Date(m.createdTimestamp).toISOString()+'] '+m.author.tag+': '+(m.content||'[بدون نص]')).join('\n').slice(0,1800000)||'لا توجد رسائل';const file=new AttachmentBuilder(Buffer.from(body,'utf8'),{name:'ticket-'+i.channelId+'.txt'});await i.channel.send({content:'Ayrexx Transcript',files:[file]});await store.updateTicket(i.channelId,{transcriptAt:new Date()});}
 async function handleTicketInteraction(i){
  if(i.isChatInputCommand()&&i.commandName==='ticket-panel'){
@@ -34,19 +35,19 @@ async function handleTicketInteraction(i){
  }
  if(i.isButton()&&i.customId.startsWith('ayrexx:ticket:')){
   const x=await ctx(i);if(x.error)return i.reply({content:x.error,ephemeral:true});const {t,admin,owner}=x;
-  if(i.customId.endsWith(':close')){if(!admin&&!owner)return i.reply({content:'صاحب التذكرة أو الدعم فقط.',ephemeral:true});if(t.status==='closed')return i.reply({content:'مغلقة بالفعل.',ephemeral:true});await store.closeTicket(i.channelId,i.user.id);return i.reply('تم إغلاق التذكرة.');}
-  if(i.customId.endsWith(':reopen')){if(!admin)return i.reply({content:'لفريق الدعم فقط.',ephemeral:true});if(t.status==='open')return i.reply({content:'التذكرة مفتوحة بالفعل.',ephemeral:true});await store.reopenTicket(i.channelId);return i.reply('تم إعادة فتح التذكرة.');}
+  if(i.customId.endsWith(':close')){if(!admin&&!owner)return i.reply({content:'صاحب التذكرة أو الدعم فقط.',ephemeral:true});if(t.status==='closed')return i.reply({content:'مغلقة بالفعل.',ephemeral:true});await store.closeTicket(i.channelId,i.user.id);await setTicketClosed(i,t,true);return i.reply('تم إغلاق التذكرة.');}
+  if(i.customId.endsWith(':reopen')){if(!admin)return i.reply({content:'لفريق الدعم فقط.',ephemeral:true});if(t.status==='open')return i.reply({content:'التذكرة مفتوحة بالفعل.',ephemeral:true});await store.reopenTicket(i.channelId);await setTicketClosed(i,t,false);return i.reply('تم إعادة فتح التذكرة.');}
   if(!admin)return i.reply({content:'لفريق الدعم فقط.',ephemeral:true});
   if(i.customId.endsWith(':claim')){if(t.claimedBy)return i.reply({content:'مستلمة بواسطة <@'+t.claimedBy+'>.',ephemeral:true});await store.updateTicket(i.channelId,{claimedBy:i.user.id});return i.reply('تم استلام التذكرة.');}
   if(i.customId.endsWith(':transcript')){await i.deferReply({ephemeral:true});await saveTranscript(i);return i.editReply('تم إرسال ملف المحادثة.');}
  }
  if(i.isChatInputCommand()&&['close','ticket-reopen','ticket-claim','ticket-unclaim','ticket-transcript','ticket-add','ticket-remove','ticket-rename','ticket-delete'].includes(i.commandName)){
   const x=await ctx(i);if(x.error)return i.reply({content:x.error,ephemeral:true});const {t,admin,owner}=x,cmd=i.commandName;
-  if(cmd==='close'){if(!admin&&!owner)return i.reply({content:'صاحب التذكرة أو الدعم فقط.',ephemeral:true});if(t.status==='closed')return i.reply({content:'مغلقة بالفعل.',ephemeral:true});await store.closeTicket(i.channelId,i.user.id);return i.reply('تم إغلاق التذكرة.');}
+  if(cmd==='close'){if(!admin&&!owner)return i.reply({content:'صاحب التذكرة أو الدعم فقط.',ephemeral:true});if(t.status==='closed')return i.reply({content:'مغلقة بالفعل.',ephemeral:true});await store.closeTicket(i.channelId,i.user.id);await setTicketClosed(i,t,true);return i.reply('تم إغلاق التذكرة.');}
   if(!admin)return i.reply({content:'الأمر لفريق الدعم والإدارة فقط.',ephemeral:true});
   if(cmd==='ticket-claim'){if(t.claimedBy)return i.reply({content:'مستلمة بواسطة <@'+t.claimedBy+'>.',ephemeral:true});await store.updateTicket(i.channelId,{claimedBy:i.user.id});return i.reply('تم استلام التذكرة.');}
   if(cmd==='ticket-unclaim'){await store.updateTicket(i.channelId,{claimedBy:''});return i.reply('تم إلغاء الاستلام.');}
-  if(cmd==='ticket-reopen'){await store.reopenTicket(i.channelId);return i.reply('تم إعادة فتح التذكرة.');}
+  if(cmd==='ticket-reopen'){await store.reopenTicket(i.channelId);await setTicketClosed(i,t,false);return i.reply('تم إعادة فتح التذكرة.');}
   if(cmd==='ticket-transcript'){await i.deferReply({ephemeral:true});await saveTranscript(i);return i.editReply('تم إرسال ملف المحادثة.');}
   if(cmd==='ticket-add'||cmd==='ticket-remove'){const m=i.options.getMember('member');if(!m)return i.reply({content:'العضو غير موجود.',ephemeral:true});await i.channel.permissionOverwrites.edit(m.id,cmd==='ticket-add'?{ViewChannel:true,SendMessages:true,ReadMessageHistory:true}:{ViewChannel:false});return i.reply(cmd==='ticket-add'?'تمت إضافة العضو.':'تمت إزالة العضو.');}
   if(cmd==='ticket-rename'){const name=i.options.getString('name').toLowerCase().replace(/[^a-z0-9-]/g,'-').replace(/-+/g,'-').slice(0,90);if(!name)return i.reply({content:'اسم غير صالح.',ephemeral:true});await i.channel.setName(name);return i.reply('تم تغيير اسم التذكرة.');}
