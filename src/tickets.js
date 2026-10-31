@@ -71,10 +71,15 @@ async function handleTicketInteraction(i){
   if(action==='close'){
    if(!admin&&!owner)return i.reply({content:'⛔ صاحب التذكرة أو فريق الدعم فقط يمكنه إغلاقها.',ephemeral:true});
    if(t.status==='closed')return i.reply({content:'ℹ️ التذكرة مغلقة بالفعل.',ephemeral:true});
-   await store.closeTicket(i.channelId,i.user.id);await i.channel.permissionOverwrites.edit(t.userId,{ViewChannel:true,SendMessages:false,ReadMessageHistory:true,AttachFiles:false});
-   const embed=new EmbedBuilder().setColor(0x777777).setTitle('🔒 تم إغلاق التذكرة').setDescription('أُغلقت التذكرة بواسطة '+i.user.toString()+'\nيمكن لفريق الدعم إعادة فتحها أو حذفها بعد حفظ المحادثة.').setFooter({text:'Ayrexx • ISANO'}).setTimestamp();
-   await i.message.edit({embeds:[embed],components:ticketRows({...t,status:'closed'},admin)});
-   return i.reply({content:'🔒 تم إغلاق التذكرة. أزرار الإدارة (إعادة الفتح / Transcript / الحذف) موجودة أسفل رسالة الإغلاق.',ephemeral:true});
+   await i.deferReply({ephemeral:true});
+   const updated=await store.closeTicket(i.channelId,i.user.id);
+   await i.channel.permissionOverwrites.edit(t.userId,{ViewChannel:true,SendMessages:false,ReadMessageHistory:true,AttachFiles:false});
+   const embed=new EmbedBuilder().setColor(0x777777).setTitle('🔒 تم إغلاق التذكرة').setDescription('أُغلقت التذكرة بواسطة '+i.user.toString()+'\\nيمكن لفريق الدعم إعادة فتحها أو حذفها بعد حفظ المحادثة.').setFooter({text:'Ayrexx • ISANO'}).setTimestamp();
+   await i.message.edit({embeds:[embed],components:ticketRows(updated||{...t,status:'closed'},admin)});
+   const log=c.ticketLogChannel?await i.guild.channels.fetch(c.ticketLogChannel).catch(()=>null):null;
+   let transcript=' لم يتم حفظ Transcript تلقائيًا؛ استخدم زر Transcript بعد ضبط قناة السجلات.';
+   if(log?.isTextBased()){try{await saveTranscript(i,log);transcript=' وتم حفظ Transcript تلقائيًا في قناة السجلات.';}catch(e){console.error('Button close transcript failed:',e.message);transcript=' لكن فشل حفظ Transcript تلقائيًا؛ راجع صلاحيات قناة السجلات.';}}
+   return i.editReply('🔒 تم إغلاق التذكرة وتحديث أزرارها.'+transcript);
   }
   if(action==='reopen'){
    if(!admin)return i.reply({content:'⛔ إعادة الفتح متاحة لفريق الدعم والإدارة فقط.',ephemeral:true});
