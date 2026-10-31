@@ -39,7 +39,7 @@ async function handleTicketInteraction(i){
   if(i.customId.endsWith(':claim')){if(t.claimedBy)return i.reply({content:'مستلمة بواسطة <@'+t.claimedBy+'>.',ephemeral:true});await store.updateTicket(i.channelId,{claimedBy:i.user.id});return i.reply('تم استلام التذكرة.');}
   if(i.customId.endsWith(':transcript')){await i.deferReply({ephemeral:true});await saveTranscript(i);return i.editReply('تم إرسال ملف المحادثة.');}
  }
- if(i.isChatInputCommand()&&['close','ticket-reopen','ticket-claim','ticket-unclaim','ticket-transcript','ticket-add','ticket-remove','ticket-rename'].includes(i.commandName)){
+ if(i.isChatInputCommand()&&['close','ticket-reopen','ticket-claim','ticket-unclaim','ticket-transcript','ticket-add','ticket-remove','ticket-rename','ticket-delete'].includes(i.commandName)){
   const x=await ctx(i);if(x.error)return i.reply({content:x.error,ephemeral:true});const {t,admin,owner}=x,cmd=i.commandName;
   if(cmd==='close'){if(!admin&&!owner)return i.reply({content:'صاحب التذكرة أو الدعم فقط.',ephemeral:true});if(t.status==='closed')return i.reply({content:'مغلقة بالفعل.',ephemeral:true});await store.closeTicket(i.channelId,i.user.id);return i.reply('تم إغلاق التذكرة.');}
   if(!admin)return i.reply({content:'الأمر لفريق الدعم والإدارة فقط.',ephemeral:true});
