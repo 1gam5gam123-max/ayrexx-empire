@@ -10,6 +10,7 @@ const commands=[
  new SlashCommandBuilder().setName('ticket-add').setDescription('Add member').addUserOption(o=>o.setName('member').setDescription('Member').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
  new SlashCommandBuilder().setName('ticket-remove').setDescription('Remove member').addUserOption(o=>o.setName('member').setDescription('Member').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
  new SlashCommandBuilder().setName('ticket-rename').setDescription('Rename ticket').addStringOption(o=>o.setName('name').setDescription('New name').setRequired(true).setMaxLength(90)).setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+, new SlashCommandBuilder().setName('ticket-delete').setDescription('Delete a closed ticket after transcript').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
 ].map(x=>x.toJSON());
 const staff=(i,c)=>Boolean(i.memberPermissions?.has(PermissionFlagsBits.ManageChannels)||i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)||(c.ticketSupportRole&&i.member?.roles?.cache?.has(c.ticketSupportRole)));
 async function ctx(i){const t=await store.getTicketByChannel(i.channelId);if(!t)return {error:'القناة دي مش تذكرة مسجلة.'};const c=await store.get(i.guildId);return {t,c,admin:staff(i,c),owner:t.userId===i.user.id};}
@@ -48,6 +49,7 @@ async function handleTicketInteraction(i){
   if(cmd==='ticket-transcript'){await i.deferReply({ephemeral:true});await saveTranscript(i);return i.editReply('تم إرسال ملف المحادثة.');}
   if(cmd==='ticket-add'||cmd==='ticket-remove'){const m=i.options.getMember('member');if(!m)return i.reply({content:'العضو غير موجود.',ephemeral:true});await i.channel.permissionOverwrites.edit(m.id,cmd==='ticket-add'?{ViewChannel:true,SendMessages:true,ReadMessageHistory:true}:{ViewChannel:false});return i.reply(cmd==='ticket-add'?'تمت إضافة العضو.':'تمت إزالة العضو.');}
   if(cmd==='ticket-rename'){const name=i.options.getString('name').toLowerCase().replace(/[^a-z0-9-]/g,'-').replace(/-+/g,'-').slice(0,90);if(!name)return i.reply({content:'اسم غير صالح.',ephemeral:true});await i.channel.setName(name);return i.reply('تم تغيير اسم التذكرة.');}
+  if(cmd==='ticket-delete'){if(t.status!=='closed')return i.reply({content:'اقفل التذكرة أولًا قبل حذفها.',ephemeral:true});await i.deferReply({ephemeral:true});await saveTranscript(i);const cfg=await store.get(i.guildId);if(cfg.ticketLogChannel){const log=await i.guild.channels.fetch(cfg.ticketLogChannel).catch(()=>null);if(log?.isTextBased())await log.send('🗑️ حذف التذكرة '+i.channel.name+' بواسطة '+i.user.tag+' بعد حفظ Transcript.').catch(()=>{});}await store.deleteTicket(i.channelId);await i.editReply('تم حفظ Transcript وحذف سجل التذكرة. سيتم حذف القناة الآن.');return i.channel.delete('Ayrexx ticket deleted after transcript');}
  }
  return false;
 }
