@@ -18,6 +18,7 @@ const settingsSchema=new mongoose.Schema({
  ticketButtonLabel:{type:String,default:'فتح تذكرة'},
  ticketButtonEmoji:{type:String,default:'🎫'},
  ticketButtonColor:{type:String,enum:['Danger','Primary','Success','Secondary'],default:'Danger'},
+ ticketTypes:{type:mongoose.Schema.Types.Mixed,default:[]},
  logMessageDelete:{type:String,default:''},
  logMember:{type:String,default:''},
  logModeration:{type:String,default:''},
@@ -51,7 +52,7 @@ async function connect(){
  if(!process.env.MONGODB_URI){console.warn('MONGODB_URI missing; database features are unavailable.');return false;}
  await mongoose.connect(process.env.MONGODB_URI);console.log('MongoDB connected');return true;
 }
-async function get(id){return await Settings.findOne({guildId:id}).lean()||{guildId:id,prefix:'!',welcomeChannel:'',welcomeMessage:'Welcome {user} to {server}!',logsChannel:'',antiSpam:true,ticketCategory:'',ticketSupportRole:'',ticketPanelChannel:'',ticketLogChannel:'',ticketPanelTitle:'Ayrexx Support',ticketPanelDescription:'محتاج مساعدة؟ افتح تذكرة وسيتواصل معك فريق الدعم.',ticketPanelFooter:'Ayrexx • ISANO',ticketButtonLabel:'فتح تذكرة',ticketButtonEmoji:'🎫',ticketButtonColor:'Danger'};}
+async function get(id){return await Settings.findOne({guildId:id}).lean()||{guildId:id,prefix:'!',welcomeChannel:'',welcomeMessage:'Welcome {user} to {server}!',logsChannel:'',antiSpam:true,ticketCategory:'',ticketSupportRole:'',ticketPanelChannel:'',ticketLogChannel:'',ticketPanelTitle:'Ayrexx Support',ticketPanelDescription:'محتاج مساعدة؟ افتح تذكرة وسيتواصل معك فريق الدعم.',ticketPanelFooter:'Ayrexx • ISANO',ticketButtonLabel:'فتح تذكرة',ticketButtonEmoji:'🎫',ticketButtonColor:'Danger',ticketTypes:[]};}
 async function set(id,value){return await Settings.findOneAndUpdate({guildId:id},{$set:value,$setOnInsert:{guildId:id}},{new:true,upsert:true,runValidators:true}).lean();}
 async function findOpenTicket(guildId,userId){return Ticket.findOne({guildId,userId,status:'open'}).lean();}
 async function nextTicketNumber(guildId){const doc=await Settings.findOneAndUpdate({guildId},{$inc:{ticketCounter:1},$setOnInsert:{guildId}},{new:true,upsert:true});return doc.ticketCounter||1;}
