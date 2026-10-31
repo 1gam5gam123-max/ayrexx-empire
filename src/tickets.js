@@ -31,3 +31,24 @@ async function handleTicketInteraction(i){
   const r=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ayrexx:ticket:close').setLabel('إغلاق').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('ayrexx:ticket:claim').setLabel('استلام').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('ayrexx:ticket:transcript').setLabel('Transcript').setStyle(ButtonStyle.Secondary));
   await ch.send({content:'أهلًا '+i.user+'، اكتب تفاصيل المشكلة وسيصلك فريق الدعم.',components:[r]});return i.reply({content:'تم فتح تذكرتك: '+ch,ephemeral:true});
  }
+ if(i.isButton()&&i.customId.startsWith('ayrexx:ticket:')){
+  const x=await ctx(i);if(x.error)return i.reply({content:x.error,ephemeral:true});const {t,admin,owner}=x;
+  if(i.customId.endsWith(':close')){if(!admin&&!owner)return i.reply({content:'صاحب التذكرة أو الدعم فقط.',ephemeral:true});if(t.status==='closed')return i.reply({content:'مغلقة بالفعل.',ephemeral:true});await store.closeTicket(i.channelId,i.user.id);return i.reply('تم إغلاق التذكرة.');}
+  if(!admin)return i.reply({content:'لفريق الدعم فقط.',ephemeral:true});
+  if(i.customId.endsWith(':claim')){if(t.claimedBy)return i.reply({content:'مستلمة بواسطة <@'+t.claimedBy+'>.',ephemeral:true});await store.updateTicket(i.channelId,{claimedBy:i.user.id});return i.reply('تم استلام التذكرة.');}
+  if(i.customId.endsWith(':transcript')){await i.deferReply({ephemeral:true});await saveTranscript(i);return i.editReply('تم إرسال ملف المحادثة.');}
+ }
+ if(i.isChatInputCommand()&&['close','ticket-reopen','ticket-claim','ticket-unclaim','ticket-transcript','ticket-add','ticket-remove','ticket-rename'].includes(i.commandName)){
+  const x=await ctx(i);if(x.error)return i.reply({content:x.error,ephemeral:true});const {t,admin,owner}=x,cmd=i.commandName;
+  if(cmd==='close'){if(!admin&&!owner)return i.reply({content:'صاحب التذكرة أو الدعم فقط.',ephemeral:true});if(t.status==='closed')return i.reply({content:'مغلقة بالفعل.',ephemeral:true});await store.closeTicket(i.channelId,i.user.id);return i.reply('تم إغلاق التذكرة.');}
+  if(!admin)return i.reply({content:'الأمر لفريق الدعم والإدارة فقط.',ephemeral:true});
+  if(cmd==='ticket-claim'){if(t.claimedBy)return i.reply({content:'مستلمة بواسطة <@'+t.claimedBy+'>.',ephemeral:true});await store.updateTicket(i.channelId,{claimedBy:i.user.id});return i.reply('تم استلام التذكرة.');}
+  if(cmd==='ticket-unclaim'){await store.updateTicket(i.channelId,{claimedBy:''});return i.reply('تم إلغاء الاستلام.');}
+  if(cmd==='ticket-reopen'){await store.reopenTicket(i.channelId);return i.reply('تم إعادة فتح التذكرة.');}
+  if(cmd==='ticket-transcript'){await i.deferReply({ephemeral:true});await saveTranscript(i);return i.editReply('تم إرسال ملف المحادثة.');}
+  if(cmd==='ticket-add'||cmd==='ticket-remove'){const m=i.options.getMember('member');if(!m)return i.reply({content:'العضو غير موجود.',ephemeral:true});await i.channel.permissionOverwrites.edit(m.id,cmd==='ticket-add'?{ViewChannel:true,SendMessages:true,ReadMessageHistory:true}:{ViewChannel:false});return i.reply(cmd==='ticket-add'?'تمت إضافة العضو.':'تمت إزالة العضو.');}
+  if(cmd==='ticket-rename'){const name=i.options.getString('name').toLowerCase().replace(/[^a-z0-9-]/g,'-').replace(/-+/g,'-').slice(0,90);if(!name)return i.reply({content:'اسم غير صالح.',ephemeral:true});await i.channel.setName(name);return i.reply('تم تغيير اسم التذكرة.');}
+ }
+ return false;
+}
+module.exports={commands,handleTicketInteraction};
