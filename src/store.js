@@ -11,6 +11,7 @@ const settingsSchema=new mongoose.Schema({
  ticketSupportRole:{type:String,default:''},
  ticketPanelChannel:{type:String,default:''},
  ticketLogChannel:{type:String,default:''},
+ ticketCounter:{type:Number,default:0},
  ticketPanelTitle:{type:String,default:'Ayrexx Support'},
  ticketPanelDescription:{type:String,default:'محتاج مساعدة؟ افتح تذكرة وسيتواصل معك فريق الدعم.'},
  ticketPanelFooter:{type:String,default:'Ayrexx • ISANO'},
@@ -32,6 +33,7 @@ const ticketSchema=new mongoose.Schema({
  guildId:{type:String,required:true,index:true},
  userId:{type:String,required:true,index:true},
  channelId:{type:String,required:true,unique:true},
+ ticketNumber:{type:Number,default:0},
  status:{type:String,enum:['open','closed'],default:'open',index:true},
  claimedBy:{type:String,default:''},
  ticketType:{type:String,default:'support'},
@@ -52,6 +54,7 @@ async function connect(){
 async function get(id){return await Settings.findOne({guildId:id}).lean()||{guildId:id,prefix:'!',welcomeChannel:'',welcomeMessage:'Welcome {user} to {server}!',logsChannel:'',antiSpam:true,ticketCategory:'',ticketSupportRole:'',ticketPanelChannel:'',ticketLogChannel:'',ticketPanelTitle:'Ayrexx Support',ticketPanelDescription:'محتاج مساعدة؟ افتح تذكرة وسيتواصل معك فريق الدعم.',ticketPanelFooter:'Ayrexx • ISANO',ticketButtonLabel:'فتح تذكرة',ticketButtonEmoji:'🎫',ticketButtonColor:'Danger'};}
 async function set(id,value){return await Settings.findOneAndUpdate({guildId:id},{$set:value,$setOnInsert:{guildId:id}},{new:true,upsert:true,runValidators:true}).lean();}
 async function findOpenTicket(guildId,userId){return Ticket.findOne({guildId,userId,status:'open'}).lean();}
+async function nextTicketNumber(guildId){const doc=await Settings.findOneAndUpdate({guildId},{$inc:{ticketCounter:1},$setOnInsert:{guildId}},{new:true,upsert:true});return doc.ticketCounter||1;}
 async function getTicketByChannel(channelId){return Ticket.findOne({channelId}).lean();}
 async function createTicket(data){return Ticket.create(data);}
 async function updateTicket(channelId,updates){return Ticket.findOneAndUpdate({channelId},{$set:updates},{new:true,runValidators:true}).lean();}
@@ -62,4 +65,4 @@ async function getWallet(guildId,userId){return await Wallet.findOne({guildId,us
 async function adjustWallet({guildId,userId,actorId,action,amount,note=''}){if(!mongoose.connection.readyState)throw new Error('Database is not connected');if(!/^\d{17,20}$/.test(guildId)||!/^\d{17,20}$/.test(userId))throw new Error('Invalid Discord ID');if(!['add','remove','set'].includes(action)||!Number.isSafeInteger(amount)||amount<0||amount>1000000000000)throw new Error('Invalid currency operation');let wallet=await Wallet.findOne({guildId,userId});if(!wallet)wallet=await Wallet.create({guildId,userId,balance:0});const before=wallet.balance;const after=action==='add'?before+amount:action==='remove'?Math.max(0,before-amount):amount;if(!Number.isSafeInteger(after))throw new Error('Balance limit exceeded');wallet.balance=after;await wallet.save();await Ledger.create({guildId,userId,actorId,action,amount,before,after,note:String(note).slice(0,250)});return {before,after};}
 async function walletHistory(guildId,userId){return Ledger.find({guildId,userId}).sort({createdAt:-1}).limit(20).lean();}
 
-module.exports={connect,get,set,findOpenTicket,getTicketByChannel,createTicket,updateTicket,closeTicket,reopenTicket,deleteTicket,getWallet,adjustWallet,walletHistory};
+module.exports={connect,get,set,nextTicketNumber,findOpenTicket,getTicketByChannel,createTicket,updateTicket,closeTicket,reopenTicket,deleteTicket,getWallet,adjustWallet,walletHistory};
