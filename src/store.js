@@ -43,6 +43,7 @@ const ticketSchema=new mongoose.Schema({
  transcriptAt:{type:Date,default:null}
 },{timestamps:true});
 ticketSchema.index({guildId:1,userId:1,status:1});
+ticketSchema.index({guildId:1,userId:1},{unique:true,partialFilterExpression:{status:'open'},name:'one_open_ticket_per_user'});
 const Ticket=mongoose.models.AyrexxTicket||mongoose.model('AyrexxTicket',ticketSchema);
 const Settings=mongoose.models.GuildSettings||mongoose.model('GuildSettings',settingsSchema);
 const Wallet=mongoose.models.AyrexxWallet||mongoose.model('AyrexxWallet',walletSchema);
@@ -57,7 +58,7 @@ async function set(id,value){return await Settings.findOneAndUpdate({guildId:id}
 async function findOpenTicket(guildId,userId){return Ticket.findOne({guildId,userId,status:'open'}).lean();}
 async function nextTicketNumber(guildId){const doc=await Settings.findOneAndUpdate({guildId},{$inc:{ticketCounter:1},$setOnInsert:{guildId}},{new:true,upsert:true});return doc.ticketCounter||1;}
 async function getTicketByChannel(channelId){return Ticket.findOne({channelId}).lean();}
-async function createTicket(data){return Ticket.create(data);}
+async function createTicket(data){try{return await Ticket.create(data);}catch(e){if(e?.code===11000)throw new Error('OPEN_TICKET_EXISTS');throw e;}}
 async function updateTicket(channelId,updates){return Ticket.findOneAndUpdate({channelId},{$set:updates},{new:true,runValidators:true}).lean();}
 async function closeTicket(channelId,closedBy){return updateTicket(channelId,{status:'closed',closedBy,closedAt:new Date()});}
 async function reopenTicket(channelId){return updateTicket(channelId,{status:'open',closedBy:'',closedAt:null});}
