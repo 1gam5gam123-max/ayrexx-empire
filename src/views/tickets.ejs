@@ -9,6 +9,7 @@
 <label>📣 Panel Channel ID<input name="ticketPanelChannel" value="<%= settings.ticketPanelChannel||'' %>" placeholder="القناة التي تنشر فيها البانل"></label>
 <label>🧾 Transcript Log Channel ID<input name="ticketLogChannel" value="<%= settings.ticketLogChannel||'' %>" placeholder="قناة خاصة بسجلات المحادثات"></label>
 </section>
+<section class="card"><h3>🧩 أنواع التذاكر المتعددة</h3><p>كل نوع يظهر كخيار في قائمة البانل، ويمكن تخصيص الوصف وفئة التذاكر ورتبة الدعم لكل نوع. اترك القائمة فارغة لاستخدام زر فتح التذكرة التقليدي.</p><label>إعدادات الأنواع بصيغة JSON<textarea name="ticketTypes" rows="12" dir="ltr" style="text-align:left;font-family:monospace"><%= JSON.stringify(settings.ticketTypes||[],null,2) %></textarea></label><small>مثال: [{"key":"support","name":"الدعم الفني","emoji":"🛠️","description":"مشكلة تقنية","categoryId":"","supportRoleId":""}] — استخدم [] لتعطيل القائمة.</small></section>
 <section class="card"><h3>🎨 تصميم بانل فتح التذاكر</h3>
 <label>عنوان البانل<input name="ticketPanelTitle" maxlength="80" value="<%= settings.ticketPanelTitle||'Ayrexx Support' %>"></label>
 <label>وصف البانل<textarea name="ticketPanelDescription" maxlength="1000"><%= settings.ticketPanelDescription||'محتاج مساعدة؟ افتح تذكرة وسيتواصل معك فريق الدعم.' %></textarea></label>
