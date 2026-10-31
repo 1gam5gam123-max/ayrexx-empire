@@ -1,51 +1,33 @@
-const {SlashCommandBuilder,PermissionFlagsBits,ChannelType,EmbedBuilder,ActionRowBuilder,ButtonBuilder,ButtonStyle}=require('discord.js');
+const {SlashCommandBuilder,PermissionFlagsBits,ChannelType,EmbedBuilder,ActionRowBuilder,ButtonBuilder,ButtonStyle,AttachmentBuilder}=require('discord.js');
 const store=require('./store');
 const commands=[
- new SlashCommandBuilder().setName('ticket-panel').setDescription('Post the support ticket panel').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
- new SlashCommandBuilder().setName('close').setDescription('Close the current support ticket')
+ new SlashCommandBuilder().setName('ticket-panel').setDescription('Post support panel').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+ new SlashCommandBuilder().setName('close').setDescription('Close this ticket'),
+ new SlashCommandBuilder().setName('ticket-reopen').setDescription('Reopen this ticket').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+ new SlashCommandBuilder().setName('ticket-claim').setDescription('Claim this ticket'),
+ new SlashCommandBuilder().setName('ticket-unclaim').setDescription('Unclaim this ticket').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+ new SlashCommandBuilder().setName('ticket-transcript').setDescription('Export ticket transcript'),
+ new SlashCommandBuilder().setName('ticket-add').setDescription('Add member').addUserOption(o=>o.setName('member').setDescription('Member').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+ new SlashCommandBuilder().setName('ticket-remove').setDescription('Remove member').addUserOption(o=>o.setName('member').setDescription('Member').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+ new SlashCommandBuilder().setName('ticket-rename').setDescription('Rename ticket').addStringOption(o=>o.setName('name').setDescription('New name').setRequired(true).setMaxLength(90)).setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
 ].map(x=>x.toJSON());
+const staff=(i,c)=>Boolean(i.memberPermissions?.has(PermissionFlagsBits.ManageChannels)||i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)||(c.ticketSupportRole&&i.member?.roles?.cache?.has(c.ticketSupportRole)));
+async function ctx(i){const t=await store.getTicketByChannel(i.channelId);if(!t)return {error:'القناة دي مش تذكرة مسجلة.'};const c=await store.get(i.guildId);return {t,c,admin:staff(i,c),owner:t.userId===i.user.id};}
+async function saveTranscript(i){let rows=[],before;for(let n=0;n<10;n++){const p=await i.channel.messages.fetch({limit:100,before}).catch(()=>null);if(!p?.size)break;rows.push(...p.values());before=p.last().id;if(p.size<100)break;}rows.sort((a,b)=>a.createdTimestamp-b.createdTimestamp);const body=rows.map(m=>'['+new Date(m.createdTimestamp).toISOString()+'] '+m.author.tag+': '+(m.content||'[بدون نص]')).join('\n').slice(0,1800000)||'لا توجد رسائل';const file=new AttachmentBuilder(Buffer.from(body,'utf8'),{name:'ticket-'+i.channelId+'.txt'});await i.channel.send({content:'Ayrexx Transcript',files:[file]});await store.updateTicket(i.channelId,{transcriptAt:new Date()});}
 async function handleTicketInteraction(i){
  if(i.isChatInputCommand()&&i.commandName==='ticket-panel'){
-  const cfg=await store.get(i.guildId);
-  const panelChannel=cfg.ticketPanelChannel?await i.guild.channels.fetch(cfg.ticketPanelChannel).catch(()=>null):i.channel;
-  if(!panelChannel?.isTextBased())return i.reply({content:'حدد قناة نصية صالحة للوحة التذاكر من إعدادات البوت أو استخدم الأمر داخل قناة نصية.',ephemeral:true});
-  const embed=new EmbedBuilder().setColor(0xC62828).setTitle('Ayrexx Support').setDescription('اضغط الزر بالأسفل لفتح تذكرة خاصة مع فريق الدعم.').setFooter({text:'Ayrexx • ISANO'});
-  const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ayrexx:ticket:create').setLabel('فتح تذكرة').setStyle(ButtonStyle.Danger).setEmoji('🎫'));
-  await panelChannel.send({embeds:[embed],components:[row]});
-  return i.reply({content:'تم نشر لوحة التذاكر في '+panelChannel+'.',ephemeral:true});
- }
- if(i.isChatInputCommand()&&i.commandName==='close'){
-  const ticket=await store.closeTicket(i.channelId,i.user.id);
-  if(!ticket)return i.reply({content:'القناة دي مش تذكرة مفتوحة.',ephemeral:true});
-  await i.reply({content:'تم إغلاق التذكرة. سيتم حذف القناة بعد 10 ثوانٍ.'});
-  const cfg=await store.get(i.guildId);
-  const log=cfg.ticketLogChannel||cfg.logsChannel;
-  if(log){const ch=await i.guild.channels.fetch(log).catch(()=>null);if(ch?.isTextBased())await ch.send('🎫 تم إغلاق تذكرة <#'+i.channelId+'> بواسطة <@'+i.user.id+'>.').catch(()=>{});}
-  setTimeout(()=>i.channel?.delete('Ayrexx ticket closed').catch(()=>{}),10000);
-  return true;
+  const c=await store.get(i.guildId),target=c.ticketPanelChannel?await i.guild.channels.fetch(c.ticketPanelChannel).catch(()=>null):i.channel;
+  if(!target?.isTextBased())return i.reply({content:'حدد قناة نصية للوحة التذاكر.',ephemeral:true});
+  const e=new EmbedBuilder().setColor(0xC62828).setTitle('Ayrexx Support').setDescription('اضغط لفتح تذكرة خاصة مع فريق الدعم.').setFooter({text:'Ayrexx • ISANO'});
+  const r=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ayrexx:ticket:create').setLabel('فتح تذكرة').setStyle(ButtonStyle.Danger));
+  await target.send({embeds:[e],components:[r]});return i.reply({content:'تم نشر اللوحة في '+target,ephemeral:true});
  }
  if(i.isButton()&&i.customId==='ayrexx:ticket:create'){
-  const existing=await store.findOpenTicket(i.guildId,i.user.id);
-  if(existing){const ch=await i.guild.channels.fetch(existing.channelId).catch(()=>null);if(ch)return i.reply({content:'عندك تذكرة مفتوحة بالفعل: '+ch,ephemeral:true});}
-  const cfg=await store.get(i.guildId);
-  const overwrites=[{id:i.guild.roles.everyone.id,deny:['ViewChannel']},{id:i.user.id,allow:['ViewChannel','SendMessages','ReadMessageHistory','AttachFiles']},{id:i.client.user.id,allow:['ViewChannel','SendMessages','ReadMessageHistory','ManageChannels']}];
-  if(cfg.ticketSupportRole)overwrites.push({id:cfg.ticketSupportRole,allow:['ViewChannel','SendMessages','ReadMessageHistory']});
-  const channel=await i.guild.channels.create({name:'ticket-'+i.user.username.toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,18),type:ChannelType.GuildText,parent:cfg.ticketCategory||undefined,permissionOverwrites:overwrites,topic:'Ayrexx ticket | user:'+i.user.id});
-  try{await store.createTicket({guildId:i.guildId,userId:i.user.id,channelId:channel.id});}
-  catch(e){await channel.delete('Ticket record failed').catch(()=>{});throw e;}
-  const closeRow=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ayrexx:ticket:close').setLabel('إغلاق التذكرة').setStyle(ButtonStyle.Secondary).setEmoji('🔒'));
-  const support=cfg.ticketSupportRole?'<@&'+cfg.ticketSupportRole+'>':'فريق الدعم';
-  await channel.send({content:'أهلًا '+i.user+'، اكتب تفاصيل المشكلة وسيصلك فريق الدعم.\n'+support,components:[closeRow]});
-  if(cfg.ticketLogChannel){const log=await i.guild.channels.fetch(cfg.ticketLogChannel).catch(()=>null);if(log?.isTextBased())await log.send('🎫 تذكرة جديدة: '+channel+' بواسطة '+i.user+'.').catch(()=>{});}
-  return i.reply({content:'تم فتح تذكرتك: '+channel,ephemeral:true});
+  const old=await store.findOpenTicket(i.guildId,i.user.id);if(old){const c=await i.guild.channels.fetch(old.channelId).catch(()=>null);if(c)return i.reply({content:'عندك تذكرة مفتوحة: '+c,ephemeral:true});}
+  const cfg=await store.get(i.guildId),perms=[{id:i.guild.roles.everyone.id,deny:['ViewChannel']},{id:i.user.id,allow:['ViewChannel','SendMessages','ReadMessageHistory','AttachFiles']},{id:i.client.user.id,allow:['ViewChannel','SendMessages','ReadMessageHistory','ManageChannels']}];
+  if(cfg.ticketSupportRole)perms.push({id:cfg.ticketSupportRole,allow:['ViewChannel','SendMessages','ReadMessageHistory']});
+  const ch=await i.guild.channels.create({name:'ticket-'+i.user.username.toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,18),type:ChannelType.GuildText,parent:cfg.ticketCategory||undefined,permissionOverwrites:perms,topic:'Ayrexx ticket | user:'+i.user.id});
+  try{await store.createTicket({guildId:i.guildId,userId:i.user.id,channelId:ch.id});}catch(e){await ch.delete().catch(()=>{});throw e;}
+  const r=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ayrexx:ticket:close').setLabel('إغلاق').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('ayrexx:ticket:claim').setLabel('استلام').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('ayrexx:ticket:transcript').setLabel('Transcript').setStyle(ButtonStyle.Secondary));
+  await ch.send({content:'أهلًا '+i.user+'، اكتب تفاصيل المشكلة وسيصلك فريق الدعم.',components:[r]});return i.reply({content:'تم فتح تذكرتك: '+ch,ephemeral:true});
  }
- if(i.isButton()&&i.customId==='ayrexx:ticket:close'){
-  const ticket=await store.closeTicket(i.channelId,i.user.id);
-  if(!ticket)return i.reply({content:'التذكرة مغلقة بالفعل أو غير مسجلة.',ephemeral:true});
-  await i.reply({content:'تم إغلاق التذكرة. سيتم حذف القناة بعد 10 ثوانٍ.'});
-  setTimeout(()=>i.channel?.delete('Ayrexx ticket closed').catch(()=>{}),10000);
-  return true;
- }
- return false;
-}
-module.exports={commands,handleTicketInteraction};
