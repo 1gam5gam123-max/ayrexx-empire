@@ -1,4 +1,4 @@
-const {SlashCommandBuilder,PermissionFlagsBits,ChannelType,EmbedBuilder,ActionRowBuilder,ButtonBuilder,ButtonStyle,AttachmentBuilder}=require('discord.js');
+const {SlashCommandBuilder,PermissionFlagsBits,ChannelType,EmbedBuilder,ActionRowBuilder,ButtonBuilder,ButtonStyle,AttachmentBuilder,StringSelectMenuBuilder}=require('discord.js');
 const store=require('./store');
 const commands=[
  new SlashCommandBuilder().setName('ticket-panel').setDescription('Post support panel').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
@@ -50,21 +50,28 @@ async function handleTicketInteraction(i){
   if(!target?.isTextBased())return i.reply({content:'حدد قناة نصية للوحة التذاكر من لوحة التحكم.',ephemeral:true});
   const e=new EmbedBuilder().setColor(0xC8102E).setTitle(c.ticketPanelTitle||'Ayrexx Support').setDescription(c.ticketPanelDescription||'محتاج مساعدة؟ افتح تذكرة وسيتواصل معك فريق الدعم.').setFooter({text:c.ticketPanelFooter||'Ayrexx • ISANO'});
   const styles={Danger:ButtonStyle.Danger,Primary:ButtonStyle.Primary,Success:ButtonStyle.Success,Secondary:ButtonStyle.Secondary};
-  const b=new ButtonBuilder().setCustomId('ayrexx:ticket:create').setLabel((c.ticketButtonLabel||'فتح تذكرة').slice(0,80)).setStyle(styles[c.ticketButtonColor]||ButtonStyle.Danger);
-  if(c.ticketButtonEmoji)b.setEmoji(c.ticketButtonEmoji);
-  await target.send({embeds:[e],components:[new ActionRowBuilder().addComponents(b)]});
+  const types=Array.isArray(c.ticketTypes)?c.ticketTypes.filter(t=>t?.key&&t?.name):[];
+  const components=types.length>1?[new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('ayrexx:ticket:type').setPlaceholder('اختر نوع التذكرة').addOptions(types.slice(0,25).map(t=>({label:t.name.slice(0,100),value:t.key,description:(t.description||t.name).slice(0,100),emoji:t.emoji||'🎫'}))))]:[new ActionRowBuilder().addComponents((()=>{const b=new ButtonBuilder().setCustomId('ayrexx:ticket:create').setLabel((c.ticketButtonLabel||'فتح تذكرة').slice(0,80)).setStyle(styles[c.ticketButtonColor]||ButtonStyle.Danger);if(c.ticketButtonEmoji)b.setEmoji(c.ticketButtonEmoji);return b;})())];
+  await target.send({embeds:[e],components});
   return i.reply({content:'✅ تم نشر بانل التذاكر في '+target.toString(),ephemeral:true});
  }
- if(i.isButton()&&i.customId==='ayrexx:ticket:create'){
+ if((i.isButton()&&i.customId==='ayrexx:ticket:create')||(i.isStringSelectMenu()&&i.customId==='ayrexx:ticket:type')){
+  const cfg=await store.get(i.guildId);
+  const selected=i.isStringSelectMenu()?i.values[0]:'';
+  const types=Array.isArray(cfg.ticketTypes)?cfg.ticketTypes:[];
+  const type=types.find(t=>t.key===selected)||null;
+  if(i.isStringSelectMenu()&&!type)return i.reply({content:'نوع التذكرة غير موجود؛ حدّث البانل.',ephemeral:true});
   const old=await store.findOpenTicket(i.guildId,i.user.id);if(old){const oldCh=await i.guild.channels.fetch(old.channelId).catch(()=>null);if(oldCh)return i.reply({content:'⚠️ عندك تذكرة مفتوحة بالفعل: **'+oldCh.name+'**',ephemeral:true});}
-  const cfg=await store.get(i.guildId),number=await store.nextTicketNumber(i.guildId),slug=String(number).padStart(4,'0');
+  await i.deferReply({ephemeral:true});
+  const number=await store.nextTicketNumber(i.guildId),slug=String(number).padStart(4,'0');
+  const category=type?.categoryId||cfg.ticketCategory||'',supportRole=type?.supportRoleId||cfg.ticketSupportRole||'';
   const perms=[{id:i.guild.roles.everyone.id,deny:[PermissionFlagsBits.ViewChannel]},{id:i.user.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory,PermissionFlagsBits.AttachFiles]},{id:i.client.user.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory,PermissionFlagsBits.ManageChannels,PermissionFlagsBits.AttachFiles]}];
-  if(cfg.ticketSupportRole)perms.push({id:cfg.ticketSupportRole,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]});
-  const ch=await i.guild.channels.create({name:'ticket-'+slug,type:ChannelType.GuildText,parent:cfg.ticketCategory||undefined,permissionOverwrites:perms,topic:'Ayrexx ticket #'+slug+' | user:'+i.user.id});
-  try{await store.createTicket({guildId:i.guildId,userId:i.user.id,channelId:ch.id,ticketNumber:number});}catch(e){await ch.delete().catch(()=>{});throw e;}
-  const embed=new EmbedBuilder().setColor(0xC8102E).setTitle('🎫 تذكرة دعم جديدة').setDescription('أهلًا '+i.user.toString()+'، اكتب تفاصيل طلبك هنا وسيقوم فريق الدعم بمساعدتك.').addFields({name:'رقم التذكرة',value:'#'+slug,inline:true},{name:'الحالة',value:'🟢 مفتوحة',inline:true}).setFooter({text:'Ayrexx Support • ISANO'}).setTimestamp();
-  await ch.send({content:i.user.toString()+(cfg.ticketSupportRole?' <@&'+cfg.ticketSupportRole+'>':''),embeds:[embed],components:ticketRows({status:'open',claimedBy:''},true)});
-  return i.reply({content:'✅ تم فتح تذكرتك بنجاح: **#'+slug+'** — ادخل قناة **'+ch.name+'** من قائمة القنوات.',ephemeral:true});
+  if(supportRole)perms.push({id:supportRole,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]});
+  const ch=await i.guild.channels.create({name:'ticket-'+slug,type:ChannelType.GuildText,parent:category||undefined,permissionOverwrites:perms,topic:'Ayrexx ticket #'+slug+' | type:'+(type?.key||'support')+' | user:'+i.user.id});
+  try{await store.createTicket({guildId:i.guildId,userId:i.user.id,channelId:ch.id,ticketNumber:number,ticketType:type?.key||'support'});}catch(e){await ch.delete().catch(()=>{});throw e;}
+  const embed=new EmbedBuilder().setColor(0xC8102E).setTitle((type?.emoji||'🎫')+' '+(type?.name||'تذكرة دعم')).setDescription('أهلًا '+i.user.toString()+'، '+(type?.description||'اكتب تفاصيل طلبك هنا وسيقوم فريق الدعم بمساعدتك.')).addFields({name:'رقم التذكرة',value:'#'+slug,inline:true},{name:'الحالة',value:'🟢 مفتوحة',inline:true}).setFooter({text:'Ayrexx Support • ISANO'}).setTimestamp();
+  await ch.send({content:i.user.toString()+(supportRole?' <@&'+supportRole+'>':''),embeds:[embed],components:ticketRows({status:'open',claimedBy:''},true)});
+  return i.editReply('✅ تم فتح تذكرتك بنجاح: **#'+slug+'** — ادخل قناة **'+ch.name+'** من قائمة القنوات.');
  }
  if(i.isButton()&&i.customId.startsWith('ayrexx:ticket:')){
   const x=await ctx(i);if(x.error)return i.reply({content:x.error,ephemeral:true});const {t,c,admin,owner}=x,action=i.customId.split(':').pop();
