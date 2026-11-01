@@ -67,4 +67,9 @@ async function getWallet(guildId,userId){return await Wallet.findOne({guildId,us
 async function adjustWallet({guildId,userId,actorId,action,amount,note=''}){if(!mongoose.connection.readyState)throw new Error('Database is not connected');if(!/^\d{17,20}$/.test(guildId)||!/^\d{17,20}$/.test(userId))throw new Error('Invalid Discord ID');if(!['add','remove','set'].includes(action)||!Number.isSafeInteger(amount)||amount<0||amount>1000000000000)throw new Error('Invalid currency operation');let wallet=await Wallet.findOne({guildId,userId});if(!wallet)wallet=await Wallet.create({guildId,userId,balance:0});const before=wallet.balance;const after=action==='add'?before+amount:action==='remove'?Math.max(0,before-amount):amount;if(!Number.isSafeInteger(after))throw new Error('Balance limit exceeded');wallet.balance=after;await wallet.save();await Ledger.create({guildId,userId,actorId,action,amount,before,after,note:String(note).slice(0,250)});return {before,after};}
 async function walletHistory(guildId,userId){return Ledger.find({guildId,userId}).sort({createdAt:-1}).limit(20).lean();}
 
-module.exports={connect,get,set,nextTicketNumber,findOpenTicket,getTicketByChannel,createTicket,updateTicket,closeTicket,reopenTicket,deleteTicket,getWallet,adjustWallet,walletHistory};
+module.exports={connect,get,set,nextTicketNumber,findOpenTicket,getTicketByChannel,createTicket,updateTicket,closeTicket,reopenTicket,deleteTicket,getWallet,adjustWallet,walletHistory,setBotStats,getBotStats};
+
+const botStatsSchema=new mongoose.Schema({key:{type:String,unique:true,required:true},guildCount:{type:Number,default:0},updatedAt:{type:Date,default:Date.now}});
+const BotStats=mongoose.models.AyrexxBotStats||mongoose.model('AyrexxBotStats',botStatsSchema);
+async function setBotStats(guildCount){return BotStats.findOneAndUpdate({key:'global'},{$set:{guildCount:Math.max(0,Number(guildCount)||0),updatedAt:new Date()} ,$setOnInsert:{key:'global'}},{upsert:true,new:true}).lean();}
+async function getBotStats(){return await BotStats.findOne({key:'global'}).lean()||{guildCount:null,updatedAt:null};}
