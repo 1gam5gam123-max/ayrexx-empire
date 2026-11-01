@@ -14,7 +14,7 @@ const commands=[
  new SlashCommandBuilder().setName('ticket-delete').setDescription('Delete a closed ticket after transcript')
 ].map(x=>x.toJSON());
 const staff=(i,c)=>Boolean(i.memberPermissions?.has(PermissionFlagsBits.ManageChannels)||i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)||(c.ticketSupportRole&&i.member?.roles?.cache?.has(c.ticketSupportRole)));
-async function ctx(i){const t=await store.getTicketByChannel(i.channelId);if(!t)return {error:'❌ القناة دي مش تذكرة مسجلة.'};const c=await store.get(i.guildId);return {t,c,admin:staff(i,c),owner:t.userId===i.user.id};}
+async function ctx(i){const t=await store.getTicketByChannel(i.channelId);if(!t)return {error:'❌ القناة دي مش تذكرة مسجلة.'};const c=await store.get(i.guildId);return {t,c,type:(c.ticketTypes||[]).find(x=>x.key===t.ticketType)||{},admin:staff(i,c),owner:t.userId===i.user.id};}
 function btn(id,label,emoji,style){const b=new ButtonBuilder().setCustomId('ayrexx:ticket:'+id).setLabel(label).setStyle(style);if(emoji)b.setEmoji(emoji);return b;}
 function ticketRows(t,admin=true){
  if(t.status==='closed'){
@@ -61,20 +61,20 @@ async function handleTicketInteraction(i){
   const types=Array.isArray(cfg.ticketTypes)?cfg.ticketTypes:[];
   const type=types.find(t=>t.key===selected)||(types.length===1?types[0]:null);
   if(i.isStringSelectMenu()&&!type)return i.reply({content:'نوع التذكرة غير موجود؛ حدّث البانل.',ephemeral:true});
-  const old=await store.findOpenTicket(i.guildId,i.user.id);if(old){const oldCh=await i.guild.channels.fetch(old.channelId).catch(()=>null);if(oldCh)return i.reply({content:'⚠️ عندك تذكرة مفتوحة بالفعل: **'+oldCh.name+'**',ephemeral:true});}
+  const member=await i.guild.members.fetch(i.user.id);if(type?.blockedRoleIds?.some(id=>member.roles.cache.has(id)))return i.reply({content:'⛔ لا يمكنك فتح هذا النوع من التذاكر بسبب رتبتك.',ephemeral:true});if(type?.allowedRoleIds?.length&&!type.allowedRoleIds.some(id=>member.roles.cache.has(id)))return i.reply({content:'⛔ هذا النوع متاح لرتب محددة فقط.',ephemeral:true});const old=await store.findOpenTicket(i.guildId,i.user.id);if(old){const oldCh=await i.guild.channels.fetch(old.channelId).catch(()=>null);if(oldCh&&(!type?.maxOpenPerUser||type.maxOpenPerUser<=1||old.ticketType===type.key))return i.reply({content:'⚠️ عندك تذكرة مفتوحة بالفعل: **'+oldCh.name+'**',ephemeral:true});}
   await i.deferReply({ephemeral:true});
   const number=await store.nextTicketNumber(i.guildId),slug=String(number).padStart(4,'0');
-  const category=type?.categoryId||cfg.ticketCategory||'',supportRole=type?.supportRoleId||cfg.ticketSupportRole||'';
+  const category=type?.categoryId||cfg.ticketCategory||'',supportRole=type?.supportRoleId||cfg.ticketSupportRole||'';const rawName=(type?.namePattern||'ticket-{{ticket.number}}').replaceAll('{{ticket.number}}',slug).replaceAll('{{user.username}}',i.user.username.toLowerCase()).replaceAll('{{user.id}}',i.user.id).replaceAll('{{category.name}}',(type?.key||'support')).replace(/[^a-z0-9-]/g,'-').replace(/-+/g,'-').slice(0,90)||'ticket-'+slug;
   const perms=[{id:i.guild.roles.everyone.id,deny:[PermissionFlagsBits.ViewChannel]},{id:i.user.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory,PermissionFlagsBits.AttachFiles]},{id:i.client.user.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory,PermissionFlagsBits.ManageChannels,PermissionFlagsBits.AttachFiles]}];
   if(supportRole)perms.push({id:supportRole,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]});
-  const ch=await i.guild.channels.create({name:'ticket-'+slug,type:ChannelType.GuildText,parent:category||undefined,permissionOverwrites:perms,topic:'Ayrexx ticket #'+slug+' | type:'+(type?.key||'support')+' | user:'+i.user.id});
+  const ch=await i.guild.channels.create({name:rawName,type:ChannelType.GuildText,parent:category||undefined,permissionOverwrites:perms,topic:'Ayrexx ticket #'+slug+' | type:'+(type?.key||'support')+' | user:'+i.user.id});
   try{await store.createTicket({guildId:i.guildId,userId:i.user.id,channelId:ch.id,ticketNumber:number,ticketType:type?.key||'support'});}catch(e){await ch.delete().catch(()=>{});if(e.message==='OPEN_TICKET_EXISTS')return i.editReply('⚠️ عندك تذكرة مفتوحة بالفعل. حدّث القنوات وحاول تدخل تذكرتك الحالية.');throw e;}
-  const embed=new EmbedBuilder().setColor(0xC8102E).setTitle((type?.emoji||'🎫')+' '+(type?.name||'تذكرة دعم')).setDescription('أهلًا '+i.user.toString()+'، '+(type?.description||'اكتب تفاصيل طلبك هنا وسيقوم فريق الدعم بمساعدتك.')).addFields({name:'رقم التذكرة',value:'#'+slug,inline:true},{name:'الحالة',value:'🟢 مفتوحة',inline:true}).setFooter({text:'Ayrexx Support • ISANO'}).setTimestamp();
+  const intro=(type?.introMessage||'أهلًا {user}، {description}').replaceAll('{user}',i.user.toString()).replaceAll('{description}',type?.description||'اكتب تفاصيل طلبك هنا وسيقوم فريق الدعم بمساعدتك.').replaceAll('{ticket}',slug);const embed=new EmbedBuilder().setColor(0xC8102E).setTitle((type?.emoji||'🎫')+' '+(type?.name||'تذكرة دعم')).setDescription(intro).addFields({name:'رقم التذكرة',value:'#'+slug,inline:true},{name:'الحالة',value:'🟢 مفتوحة',inline:true}).setFooter({text:'Ayrexx Support • ISANO'}).setTimestamp();
   await ch.send({content:i.user.toString()+(supportRole?' <@&'+supportRole+'>':''),embeds:[embed],components:ticketRows({status:'open',claimedBy:''},true)});
   return i.editReply('✅ تم فتح تذكرتك بنجاح: **#'+slug+'** — ادخل قناة **'+ch.name+'** من قائمة القنوات.');
  }
  if(i.isButton()&&i.customId.startsWith('ayrexx:ticket:')){
-  const x=await ctx(i);if(x.error)return i.reply({content:x.error,ephemeral:true});const {t,c,admin,owner}=x,action=i.customId.split(':').pop();
+  const x=await ctx(i);if(x.error)return i.reply({content:x.error,ephemeral:true});const {t,c,type,admin,owner}=x,action=i.customId.split(':').pop();
   if(action==='close'){
    if(!admin&&!owner)return i.reply({content:'⛔ صاحب التذكرة أو فريق الدعم فقط يمكنه إغلاقها.',ephemeral:true});
    if(t.status==='closed')return i.reply({content:'ℹ️ التذكرة مغلقة بالفعل.',ephemeral:true});
@@ -125,7 +125,7 @@ async function handleTicketInteraction(i){
   }
  }
  if(i.isChatInputCommand()&&['close','ticket-reopen','ticket-claim','ticket-unclaim','ticket-transcript','ticket-info','ticket-add','ticket-remove','ticket-rename','ticket-delete'].includes(i.commandName)){
-  const x=await ctx(i);if(x.error)return i.reply({content:x.error,ephemeral:true});const {t,c,admin,owner}=x,cmd=i.commandName;
+  const x=await ctx(i);if(x.error)return i.reply({content:x.error,ephemeral:true});const {t,c,type,admin,owner}=x,cmd=i.commandName;
   if(cmd==='close'){if(!admin&&!owner)return i.reply({content:'⛔ صاحب التذكرة أو الدعم فقط.',ephemeral:true});if(t.status==='closed')return i.reply({content:'مغلقة بالفعل.',ephemeral:true});await i.deferReply({ephemeral:true});const updated=await store.closeTicket(i.channelId,i.user.id);await i.channel.permissionOverwrites.edit(t.userId,{ViewChannel:true,SendMessages:false,ReadMessageHistory:true,AttachFiles:false});await syncTicketMessage(i.channel,updated||{...t,status:'closed'},i.user.id,admin);const log=c.ticketLogChannel?await i.guild.channels.fetch(c.ticketLogChannel).catch(()=>null):null;let transcript='';if(log?.isTextBased()){try{await saveTranscript(i,log);transcript=' وتم حفظ Transcript في السجلات.';}catch(e){console.error('Auto transcript failed:',e.message);transcript=' لكن تعذر حفظ Transcript؛ راجع صلاحيات قناة السجلات.';}}return i.editReply('🔒 تم إغلاق التذكرة وتحديث أزرارها.'+transcript);}
   if(cmd==='ticket-info'){if(!admin&&!owner)return i.reply({content:'صاحب التذكرة أو فريق الدعم فقط.',ephemeral:true});const info=new EmbedBuilder().setColor(0xC8102E).setTitle('معلومات التذكرة').addFields({name:'الرقم',value:'#'+String(t.ticketNumber||0).padStart(4,'0'),inline:true},{name:'الحالة',value:t.status==='open'?'مفتوحة':'مغلقة',inline:true},{name:'صاحب التذكرة',value:'<@'+t.userId+'>',inline:true},{name:'المستلم',value:t.claimedBy?'<@'+t.claimedBy+'>':'غير مستلمة',inline:true},{name:'تاريخ الإنشاء',value:t.createdAt?'<t:'+Math.floor(new Date(t.createdAt).getTime()/1000)+':F>':'غير متاح',inline:false});return i.reply({embeds:[info],ephemeral:true});}
   if(!admin)return i.reply({content:'الأمر لفريق الدعم والإدارة فقط.',ephemeral:true});
