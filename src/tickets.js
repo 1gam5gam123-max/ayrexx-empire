@@ -61,7 +61,7 @@ async function handleTicketInteraction(i){
   const types=Array.isArray(cfg.ticketTypes)?cfg.ticketTypes:[];
   const type=types.find(t=>t.key===selected)||(types.length===1?types[0]:null);
   if(i.isStringSelectMenu()&&!type)return i.reply({content:'نوع التذكرة غير موجود؛ حدّث البانل.',ephemeral:true});
-  const member=await i.guild.members.fetch(i.user.id);if(type?.blockedRoleIds?.some(id=>member.roles.cache.has(id)))return i.reply({content:'⛔ لا يمكنك فتح هذا النوع من التذاكر بسبب رتبتك.',ephemeral:true});if(type?.allowedRoleIds?.length&&!type.allowedRoleIds.some(id=>member.roles.cache.has(id)))return i.reply({content:'⛔ هذا النوع متاح لرتب محددة فقط.',ephemeral:true});const old=await store.findOpenTicket(i.guildId,i.user.id);if(old){const oldCh=await i.guild.channels.fetch(old.channelId).catch(()=>null);if(oldCh&&(!type?.maxOpenPerUser||type.maxOpenPerUser<=1||old.ticketType===type.key))return i.reply({content:'⚠️ عندك تذكرة مفتوحة بالفعل: **'+oldCh.name+'**',ephemeral:true});}
+  const member=await i.guild.members.fetch(i.user.id);if(type?.blockedRoleIds?.some(id=>member.roles.cache.has(id)))return i.reply({content:'⛔ لا يمكنك فتح هذا النوع من التذاكر بسبب رتبتك.',ephemeral:true});if(type?.allowedRoleIds?.length&&!type.allowedRoleIds.some(id=>member.roles.cache.has(id)))return i.reply({content:'⛔ هذا النوع متاح لرتب محددة فقط.',ephemeral:true});const old=await store.findOpenTicket(i.guildId,i.user.id);if(old){const oldCh=await i.guild.channels.fetch(old.channelId).catch(()=>null);if(oldCh)return i.reply({content:'⚠️ عندك تذكرة مفتوحة بالفعل: **'+oldCh.name+'**',ephemeral:true});}
   await i.deferReply({ephemeral:true});
   const number=await store.nextTicketNumber(i.guildId),slug=String(number).padStart(4,'0');
   const category=type?.categoryId||cfg.ticketCategory||'',supportRole=type?.supportRoleId||cfg.ticketSupportRole||'';const rawName=(type?.namePattern||'ticket-{{ticket.number}}').replaceAll('{{ticket.number}}',slug).replaceAll('{{user.username}}',i.user.username.toLowerCase()).replaceAll('{{user.id}}',i.user.id).replaceAll('{{category.name}}',(type?.key||'support')).replace(/[^a-z0-9-]/g,'-').replace(/-+/g,'-').slice(0,90)||'ticket-'+slug;
@@ -80,7 +80,7 @@ async function handleTicketInteraction(i){
    if(t.status==='closed')return i.reply({content:'ℹ️ التذكرة مغلقة بالفعل.',ephemeral:true});
    await i.deferReply({ephemeral:true});
    const updated=await store.closeTicket(i.channelId,i.user.id);
-   await i.channel.permissionOverwrites.edit(t.userId,{ViewChannel:true,SendMessages:false,ReadMessageHistory:true,AttachFiles:false});
+   await i.channel.permissionOverwrites.edit(t.userId,{ViewChannel:true,SendMessages:false,ReadMessageHistory:true,AttachFiles:false});if(type?.closedCategoryId)await i.channel.setParent(type.closedCategoryId,{lockPermissions:false}).catch(e=>console.error('Closed category move failed:',e.message));
    const embed=new EmbedBuilder().setColor(0x777777).setTitle('🔒 تم إغلاق التذكرة').setDescription('أُغلقت التذكرة بواسطة '+i.user.toString()+'\\nيمكن لفريق الدعم إعادة فتحها أو حذفها بعد حفظ المحادثة.').setFooter({text:'Ayrexx • ISANO'}).setTimestamp();
    await i.message.edit({embeds:[embed],components:ticketRows(updated||{...t,status:'closed'},admin)});
    const log=c.ticketLogChannel?await i.guild.channels.fetch(c.ticketLogChannel).catch(()=>null):null;
@@ -91,7 +91,7 @@ async function handleTicketInteraction(i){
   if(action==='reopen'){
    if(!admin)return i.reply({content:'⛔ إعادة الفتح متاحة لفريق الدعم والإدارة فقط.',ephemeral:true});
    if(t.status==='open')return i.reply({content:'ℹ️ التذكرة مفتوحة بالفعل.',ephemeral:true});
-   await store.reopenTicket(i.channelId);await i.channel.permissionOverwrites.edit(t.userId,{ViewChannel:true,SendMessages:true,ReadMessageHistory:true,AttachFiles:true});
+   await store.reopenTicket(i.channelId);await i.channel.permissionOverwrites.edit(t.userId,{ViewChannel:true,SendMessages:true,ReadMessageHistory:true,AttachFiles:true});if(type?.categoryId)await i.channel.setParent(type.categoryId,{lockPermissions:false}).catch(e=>console.error('Reopen category move failed:',e.message));
    const embed=new EmbedBuilder().setColor(0xC8102E).setTitle('🔓 تمت إعادة فتح التذكرة').setDescription('تمت إعادة فتحها بواسطة '+i.user.toString()+' ويمكن متابعة المحادثة.').setFooter({text:'Ayrexx • ISANO'}).setTimestamp();
    await i.message.edit({embeds:[embed],components:ticketRows({...t,status:'open'},admin)});
    return i.reply({content:'✅ تم إعادة فتح التذكرة.',ephemeral:true});
