@@ -6,7 +6,7 @@
 <a class="brand" href="/"><span class="brand-mark">♛<b>AX</b></span><span><strong>AYRE<span>XX</span></strong><small>Discord Bot • Control Panel</small></span></a>
 <div class="user-chip"><img class="avatar" src="<%= user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=96` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>" alt="صورة الحساب"><b><%= user.global_name || user.username %></b><a href="/logout">خروج</a></div>
 </header>
-<main class="content" style="max-width:1000px;margin:45px auto">
+<main class="server-page content" style="max-width:1000px;margin:45px auto">
 <section class="hero"><div class="hero-copy"><h1>اختار <span>السيرفر</span></h1><p>حدد سيرفر Discord اللي عاوز تدير إعدادات Ayrexx فيه.</p><div class="rights"><b>ISANO</b> : حقوق التطوير والتصميم</div></div></section>
 <section class="card" style="margin-top:24px"><h3>السيرفرات المتاحة لحسابك</h3>
 <% if(!guilds.length){ %><div class="empty"><b>مفيش سيرفرات متاحة</b><p>لازم تكون عندك صلاحية Manage Server أو Administrator في سيرفر واحد على الأقل.</p></div><% } else { %>
